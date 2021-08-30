@@ -6,11 +6,11 @@
 #ifndef BLE_DIGITIZER
 #define BLE_DIGITIZER
 
-#include "Arduino.h"
+#include <Arduino.h>
 
-#include "BLECharacteristic.h"
-#include "BLEHIDReportReferenceDescriptor.h"
-#include "BLEHID.h"
+#include <BLECharacteristic.h>
+#include <BLEHIDReportReferenceDescriptor.h>
+#include <BLEHID.h>
 
 // Digitizer report for Pen side, Eraser Side and barrel buttons
 #define DIGIT_PEN_TIP_INRANGE 	0x20 // Pen side is hovering. 

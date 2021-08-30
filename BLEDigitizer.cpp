@@ -65,7 +65,7 @@
  
 BLEDigitizer::BLEDigitizer() :
   BLEHID(HID_Digi, sizeof(HID_Digi), 11),
-  _reportCharacteristic("2a4d", BLERead | BLENotify, 4),
+  _reportCharacteristic("2a4d", BLERead | BLENotify, 8),
   _reportReferenceDescriptor(BLEHIDDescriptorTypeInput),
   _button(0)
 {

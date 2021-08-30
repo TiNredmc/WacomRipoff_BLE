@@ -5,7 +5,7 @@
 // Import libraries (BLEPeripheral depends on SPI)
 #include <SPI.h>
 #include <BLEHIDPeripheral.h>
-#include <BLEDigitizer.h>
+#include "BLEDigitizer.h"
 
 // w9013 required stuffs
 #include <Wire.h>
@@ -28,7 +28,7 @@ static uint8_t dataQ[WACOM_QUERY_SIZE];// data array, store the data received fr
 static uint16_t Xpos;// X axis value keeper.
 static uint16_t Yinvert;// Y axis value keeper (for inverting too).
 static uint16_t PenPressure;// Pressure value keeper.
-static uint8_t usage_report;// FOr reporting Pen tip, Eraser Tip and barrel button 
+static uint8_t usage_report;// FOr reporting Pen tip, Eraser Tip and barrel button
 
 // define pins (varies per shield/board)
 #define BLE_REQ   6
@@ -76,7 +76,8 @@ uint8_t w9013_query_device() {
 
 void setup() {
   Wire.setPins(2, 1);// set SDA, SCL pin (module pin : P4 and P3)
-
+  Wire.begin();
+  
   pinMode(WACOM_INT, INPUT_PULLUP);
   pinMode(LED_stat, OUTPUT);
 
@@ -86,17 +87,22 @@ void setup() {
     digitalWrite(LED_stat, LOW);
     delay(100);
   }
-
+    digitalWrite(LED_stat, HIGH);
+    delay(100);
+    digitalWrite(LED_stat, LOW);
+    delay(100);
+    
   // clears bond data on every boot
   bleHID.clearBondStoreData();
   // Set Bluetooth name
   bleHID.setDeviceName("Wac0m RipOff BLE");
   // Set local name as HID
-  bleHID.setLocalName("HID");
+  bleHID.setLocalName("WC0M");
   // Add HID device (BLEDigitizer)
   bleHID.addHID(HIDd);
   // Init the Bluetooth HID
   bleHID.begin();
+
 
 }
 
@@ -105,15 +111,15 @@ void loop() {
 
   if (central) {
     // central connected to peripheral
-
+    digitalWrite(LED_stat, HIGH);
     while (bleHID.connected()) {
+     
       if (digitalRead(WACOM_INT) == LOW) {
-
         do {
           w9013_read(dataQ, WACOM_QUERY_SIZE);
         } while (digitalRead(WACOM_INT) == LOW);
 
-        digitalWrite(LED_stat, HIGH);
+        //digitalWrite(LED_stat, HIGH);
 
         switch (dataQ[3]) {
           case 0x20: // Pen is in range (Windows determine as Tip is in range)
@@ -129,7 +135,7 @@ void loop() {
             break;
 
           case 0x2c: // Erase is pressing on surface
-           usage_report = 0x2A;// Set in-rage bit and also invert and eraser bit.
+            usage_report = 0x2A;// Set in-rage bit and also invert and eraser bit.
             break;
 
           default:
@@ -149,8 +155,8 @@ void loop() {
         PenPressure = dataQ[8] | dataQ[9] << 8;// Send lower byte first | higher byte << 8
 
         // Send Bluetooth HID report
-        HIDd.DigitizerReport(DIGIT_PEN_TIP_INRANGE, Xpos, Yinvert, PenPressure);
-        digitalWrite(LED_stat, LOW);
+        HIDd.DigitizerReport(usage_report, Xpos, Yinvert, PenPressure);
+        //digitalWrite(LED_stat, LOW);
       }
     }
 
