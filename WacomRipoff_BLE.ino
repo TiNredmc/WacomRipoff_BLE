@@ -1,6 +1,11 @@
 /* Wac0m Rifoff BLE, Wac0m Ripoff project ported to Nordic nRF51.
    Coded by TinLethax 2021/08/13 +7
 */
+/* useful data
+    https://lwn.net/ml/linux-kernel/20210818154935.1154-7-alistair@alistair23.me/
+    https://lwn.net/ml/linux-kernel/20210326015229.141-5-alistair%40alistair23.me/
+    https://github.com/reMarkable/linux/blob/zero-colors/drivers/input/touchscreen/wacom_i2c.c
+*/
 
 // Import libraries (BLEPeripheral depends on SPI)
 #include <SPI.h>
@@ -13,12 +18,32 @@
 
 #define WACOM_ADDR      0x09 // Wacom i2c address (7-bit)
 
-#define WACOM_CMD_QUERY0  0x04
-#define WACOM_CMD_QUERY1  0x00
-#define WACOM_CMD_QUERY2  0x33
-#define WACOM_CMD_QUERY3  0x02
-#define WACOM_CMD_THROW0  0x05
-#define WACOM_CMD_THROW1  0x00
+/* Byte order marker */
+// for commands
+#define WACOM_CMD_LSB  0x04// COMMAND LSB
+#define WACOM_CMD_MSB  0x00// COMMAND MSB
+// for data
+#define WACOM_DAT_LSB  0x05// DATA LSB
+#define WACOM_DAT_MSB  0x00// DATA MSB 
+
+/* Opcodes */
+#define WACOM_OPC_RST   0x01// Opcode : reset
+#define WACOM_OPC_GRP   0x02// Opcode : Get report 
+#define WACOM_OPC_SRP   0x03// Opcode : Set report
+#define WACOM_OPC_SPWR  0x08// Opcode : Set power modes (Sleep / Wake)
+
+/* power modes */
+#define PWR_ON    0x00
+#define PWR_OFF   0x01
+
+/* report types */
+#define WACOM_CMD_RIN   0x10// report input command 
+#define WACOM_CMD_ROT   0x20// report output command
+#define WACOM_CMD_RPF   0x30// report feature command
+
+/* Feature report */
+#define WACOM_QUERY_REPORT  0x03// Query report command
+
 #define WACOM_QUERY_SIZE  19
 
 #define WACOM_INT 3 // P5 (Chip pin is pin 3) as Input interrupt (but use for polling).
@@ -55,10 +80,12 @@ void w9013_read(uint8_t *buf, size_t len) {
 
 // w9013 initialization
 uint8_t w9013_query_device() {
-  uint8_t cmd1[4] = { WACOM_CMD_QUERY0, WACOM_CMD_QUERY1,
-                      WACOM_CMD_QUERY2, WACOM_CMD_QUERY3
+  uint8_t cmd1[4] = { WACOM_CMD_LSB, WACOM_CMD_MSB, // set byte order LSB first MSB last
+                      WACOM_CMD_RPF | WACOM_QUERY_REPORT,// Report feature by query report from w9013
+                      WACOM_OPC_GRP // run opcode "Get report" to get the report from w9013
                     };
-  uint8_t cmd2[2] = { WACOM_CMD_THROW0, WACOM_CMD_THROW1 };
+  uint8_t cmd2[2] = { WACOM_DAT_LSB, WACOM_DAT_MSB // report data is LSB byte first MSB byte last
+                    };
   uint16_t fwVer = 0;
 
   // Send 2 query CMDs
@@ -74,6 +101,20 @@ uint8_t w9013_query_device() {
   return 0;// nomal
 }
 
+/* Experiment soon */
+// Power setting, Put to sleep by set to 0, Wake by set to 1
+void w9013_pwr_set(bool pwrset) {
+  uint8_t cmd1[6] = { WACOM_CMD_LSB, WACOM_CMD_MSB,// CMD LSB byte frist
+                      pwrset ? PWR_ON : PWR_OFF, // set sleep /wake
+                      WACOM_OPC_SPWR,// by the Set power mode command
+                      WACOM_DAT_LSB, WACOM_DAT_MSB// DATA LSB byte first
+                    };
+
+  w9013_send(cmd1, 6);// send the packet to w9013
+  w9013_read(cmd1, 6);// dummy read from w9013, do nothing with the data.
+}
+
+// Data polling from w9013
 void w9013_poll() {
   do {
     w9013_read(dataQ, WACOM_QUERY_SIZE);
@@ -170,6 +211,6 @@ void loop() {
 
     // central disconnected
     if (digitalRead(WACOM_INT) == LOW)
-        w9013_poll();// poll in case of Wacom w9013 stuck after BLE disconnected, this will help when reconnect
+      w9013_poll();// poll in case of Wacom w9013 stuck after BLE disconnected, this will help when reconnect
   }
 }
