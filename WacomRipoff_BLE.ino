@@ -9,7 +9,7 @@
 
 // w9013 required stuffs
 #include <Wire.h>
-#define TWI_FREQ 400000L // Define speed used by twi.c, 400KHz i2c
+//#define TWI_FREQ 400000L // Define speed used by twi.c, 400KHz i2c
 
 #define WACOM_ADDR      0x09 // Wacom i2c address (7-bit)
 
@@ -74,10 +74,58 @@ uint8_t w9013_query_device() {
   return 0;// nomal
 }
 
+void w9013_poll() {
+  do {
+    w9013_read(dataQ, WACOM_QUERY_SIZE);
+  } while (digitalRead(WACOM_INT) == LOW);
+
+  //digitalWrite(LED_stat, HIGH);
+
+  /* I rewrite the descriptor to make all the usage reports align with the actual data byte received from w9013,
+     So we can send the dataQ[3] directly without switch case slowing it down
+  */
+  /* switch (dataQ[3]) {
+     case 0x20: // Pen is in range (Windows determine as Tip is in range)
+       usage_report = 0x20;
+       break;
+
+     case 0x21: // Pen tip is pressing on surface
+       usage_report = 0x21;
+       break;
+
+     case 0x28: // Eraser is in range
+       usage_report = 0x22;// Set in-range and invert bit
+       break;
+
+     case 0x2c: // Erase is pressing on surface
+       usage_report = 0x2A;// Set in-rage bit and also invert and eraser bit.
+       break;
+
+     default:
+       break;
+    }*/
+
+  //usage_report = usage_report | ((dataQ[3] & 0x02 ? 1 : 0) << 2) | ((dataQ[3] & 0x10 ? 1 : 0) << 1);
+
+  // X position report
+  Xpos = dataQ[6] | dataQ[7] << 8;// Send lower byte | higher byte << 8
+
+  // Y position report
+  Yinvert = dataQ[5] << 8 | dataQ[4];
+  Yinvert = 0x344E - Yinvert;// Invert Y axis
+
+  // Pressure report
+  PenPressure = dataQ[8] | dataQ[9] << 8;// Send lower byte first | higher byte << 8
+
+  //digitalWrite(LED_stat, LOW);
+
+}
+
 void setup() {
   Wire.setPins(2, 1);// set SDA, SCL pin (module pin : P4 and P3)
   Wire.begin();
-  
+  Wire.setClock(400000);
+
   pinMode(WACOM_INT, INPUT_PULLUP);
   pinMode(LED_stat, OUTPUT);
 
@@ -87,11 +135,11 @@ void setup() {
     digitalWrite(LED_stat, LOW);
     delay(100);
   }
-    digitalWrite(LED_stat, HIGH);
-    delay(100);
-    digitalWrite(LED_stat, LOW);
-    delay(100);
-    
+  digitalWrite(LED_stat, HIGH);
+  delay(100);
+  digitalWrite(LED_stat, LOW);
+  delay(100);
+
   // clears bond data on every boot
   bleHID.clearBondStoreData();
   // Set Bluetooth name
@@ -103,7 +151,6 @@ void setup() {
   // Init the Bluetooth HID
   bleHID.begin();
 
-
 }
 
 void loop() {
@@ -111,55 +158,18 @@ void loop() {
 
   if (central) {
     // central connected to peripheral
-    digitalWrite(LED_stat, HIGH);
-    while (bleHID.connected()) {
-     
+    //digitalWrite(LED_stat, HIGH);
+    while (central.connected()) {
       if (digitalRead(WACOM_INT) == LOW) {
-        do {
-          w9013_read(dataQ, WACOM_QUERY_SIZE);
-        } while (digitalRead(WACOM_INT) == LOW);
-
-        //digitalWrite(LED_stat, HIGH);
-
-        switch (dataQ[3]) {
-          case 0x20: // Pen is in range (Windows determine as Tip is in range)
-            usage_report = 0x20;
-            break;
-
-          case 0x21: // Pen tip is pressing on surface
-            usage_report = 0x21;
-            break;
-
-          case 0x28: // Eraser is in range
-            usage_report = 0x22;// Set in-range and invert bit
-            break;
-
-          case 0x2c: // Erase is pressing on surface
-            usage_report = 0x2A;// Set in-rage bit and also invert and eraser bit.
-            break;
-
-          default:
-            break;
-        }
-
-        usage_report = usage_report | ((dataQ[3] & 0x02 ? 1 : 0) << 2) | ((dataQ[3] & 0x10 ? 1 : 0) << 1);
-
-        // X position report
-        Xpos = dataQ[6] | dataQ[7] << 8;// Send lower byte | higher byte << 8
-
-        // Y position report
-        Yinvert = dataQ[5] << 8 | dataQ[4];
-        Yinvert = 0x344E - Yinvert;// Invert Y axis
-
-        // Pressure report
-        PenPressure = dataQ[8] | dataQ[9] << 8;// Send lower byte first | higher byte << 8
-
-        // Send Bluetooth HID report
-        HIDd.DigitizerReport(usage_report, Xpos, Yinvert, PenPressure);
-        //digitalWrite(LED_stat, LOW);
+        w9013_poll();
+        HIDd.DigitizerReport(dataQ[3], Xpos, Yinvert, PenPressure);
+        delay(1);// delay 1ms, throttle down the crazy polling rate.
       }
+      // Send Bluetooth HID report
     }
 
     // central disconnected
+    if (digitalRead(WACOM_INT) == LOW)
+        w9013_poll();// poll in case of Wacom w9013 stuck after BLE disconnected, this will help when reconnect
   }
 }

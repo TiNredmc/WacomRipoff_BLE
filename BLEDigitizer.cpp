@@ -13,9 +13,9 @@
 			0xA1, 0x00,							// Collection : Physical
 				// Boolean 1 and 0 (1 means present, 0 means not present).
 				0x09, 0x42,						// Usage : Pen Tip
-				0x09, 0x3C,						// Usage : Invert (Eraser Tip)
 				0x09, 0x44,						// Usage : 1st Barrel Button
-				0x09, 0x45,						// Usage : Eraser Tip
+        0x09, 0x45,           // Usage : Eraser Tip
+        0x09, 0x3C,           // Usage : Invert (Eraser Tip)
 				0x09, 0x5A,						// Usage : 2nd Barrel Button
 				0x09, 0x32,						// Usage : pen is in-range
 				0x25, 0x01,						// Logical Max is 1
