@@ -14,10 +14,11 @@
 				// Boolean 1 and 0 (1 means present, 0 means not present).
 				0x09, 0x42,						// Usage : Pen Tip
 				0x09, 0x44,						// Usage : 1st Barrel Button
-        0x09, 0x45,           // Usage : Eraser Tip
-        0x09, 0x3C,           // Usage : Invert (Eraser Tip)
+				0x09, 0x45,           // Usage : Eraser Tip
+				0x09, 0x3C,           // Usage : Invert (Eraser Tip)
 				0x09, 0x5A,						// Usage : 2nd Barrel Button
 				0x09, 0x32,						// Usage : pen is in-range
+				
 				0x25, 0x01,						// Logical Max is 1
 				0x15, 0x00,						// Logical Min is 0
 				0x75, 0x01,						// Report size is 6 usages
@@ -52,12 +53,20 @@
 				// Pen tip pressure require Digitizer as a Usage page
 				0x05, 0x0D,						// Usage Page : Digitizer
 				0x09, 0x30,						// Usage : Tip Pressure
-				0x26, 0xFF, 0x07,				// Logical Max is 2047 (according to my w9013 capability, This is Wacom EMR)
+				0x26, 0xFF, 0x07,				// Logical Max is 2047 (according to my w9013's capability, This is Wacom EMR)
 				0x15, 0x00,						// Logical Min is  0
 				0x75, 0x10,						// Report Size 16 (16bit - 2bytes)
 				0x95, 0x01,						// Report count is 1
 				0x81, 0x02,						// Input (Data, Var, Abs)
 
+				// Battery report stuffs
+			//	0x05, 0x06,						// Usage Page : Generic Device Controls Page
+			//	0x09, 0x20,						// Usage Battery strength
+			//	0x25, 0x64,						// Logical Max is 100, (100 percent bettery)
+			//	0x15, 0x00,						// Logical Min is 0, (0 percent battery).
+			//	0x75, 0x08,						// Report size is 8 bit
+			//	0x95, 0x01,						// Report count is 1 (1x8bit = 1 byte).
+			//	0x81, 0x02,						// Input (Data, Var, Abs)
 			0xC0,								// End Collection (Phy)
 		0xC0
  };
@@ -72,7 +81,7 @@ BLEDigitizer::BLEDigitizer() :
 }
 
 void BLEDigitizer::DigitizerReport(uint8_t rpt, uint16_t Xco, uint16_t Yco, uint16_t Pressure) {
-  unsigned char HIDReport[8]= { 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  unsigned char HIDReport[9]= { 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
   // copy to array before report HID event
 
@@ -83,7 +92,8 @@ void BLEDigitizer::DigitizerReport(uint8_t rpt, uint16_t Xco, uint16_t Yco, uint
   HIDReport[5] = Yco >> 8;
   HIDReport[6] = Pressure;
   HIDReport[7] = Pressure >> 8;
-
+  HIDReport[8] = 100;// battery report 100 percent.
+  
   this->sendData(this->_reportCharacteristic, HIDReport, sizeof(HIDReport));
 }
 
