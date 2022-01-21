@@ -12,6 +12,9 @@
 #include <BLEHIDPeripheral.h>
 #include "BLEDigitizer.h"
 
+// library for MAX17043 fuel gauge https://github.com/porrey/max1704x
+#include "MAX17043.h"
+
 // w9013 required stuffs
 #include <Wire.h>
 //#define TWI_FREQ 400000L // Define speed used by twi.c, 400KHz i2c
@@ -55,6 +58,9 @@ static uint16_t Yinvert;// Y axis value keeper (for inverting too).
 static uint16_t PenPressure;// Pressure value keeper.
 static uint8_t usage_report;// FOr reporting Pen tip, Eraser Tip and barrel button
 
+// for fuel gauge status
+uint8_t gauge_failed = 0;
+
 // define pins (varies per shield/board)
 #define BLE_REQ   6
 #define BLE_RDY   7
@@ -62,6 +68,13 @@ static uint8_t usage_report;// FOr reporting Pen tip, Eraser Tip and barrel butt
 
 BLEHIDPeripheral bleHID = BLEHIDPeripheral(BLE_REQ, BLE_RDY, BLE_RST);
 BLEDigitizer HIDd;
+
+// Thanks https://github.com/kriswiner/nRF52832DevBoard/blob/master/BMP280_nRF52.ino
+// for the battery report example.
+// Battery Service
+BLEService batteryService = BLEService("180F");
+BLEUnsignedCharCharacteristic battlevelCharacteristic = BLEUnsignedCharCharacteristic("2A19", BLERead | BLENotify); // battery level is uint8_t
+BLEDescriptor battlevelDescriptor = BLEDescriptor("2901", "Battery Level 0 - 100");
 
 void w9013_send(uint8_t *buf, size_t len) {
   Wire.beginTransmission(WACOM_ADDR);// Begin transmission
@@ -176,6 +189,23 @@ void setup() {
     digitalWrite(LED_stat, LOW);
     delay(100);
   }
+
+  // fuel gauge probing
+  if(FuelGauge.begin()){
+    FuelGauge.quickstart();
+    gauge_failed = 0;
+  }else{ // slow blink to indicates fuel gauge probing error and then continue
+    digitalWrite(LED_stat, HIGH);
+    delay(500);
+    digitalWrite(LED_stat, LOW);
+    delay(500);
+    digitalWrite(LED_stat, HIGH);
+    delay(500);
+    digitalWrite(LED_stat, LOW);
+    delay(500);
+    gauge_failed = 1;
+  }
+  
   digitalWrite(LED_stat, HIGH);
   delay(100);
   digitalWrite(LED_stat, LOW);
@@ -192,6 +222,12 @@ void setup() {
   // Init the Bluetooth HID
   bleHID.begin();
 
+   // Battery service
+  bleHID.setAdvertisedServiceUuid(batteryService.uuid());
+  bleHID.addAttribute(batteryService);
+  bleHID.addAttribute(battlevelCharacteristic);
+  bleHID.addAttribute(battlevelDescriptor);
+
 }
 
 void loop() {
@@ -207,6 +243,9 @@ void loop() {
         delay(1);// delay 1ms, throttle down the crazy polling rate.
       }
       // Send Bluetooth HID report
+
+      // Send battery report 
+      battlevelCharacteristic.setValue((uint8_t)(FuelGauge.percent()));
     }
 
     // central disconnected
