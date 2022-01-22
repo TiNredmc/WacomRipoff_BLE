@@ -51,6 +51,7 @@
 
 #define WACOM_INT 3 // P5 (Chip pin is pin 3) as Input interrupt (but use for polling).
 #define LED_stat  4 // P6 (Chip pin is pin 4) as LED status.
+#define BAT_LOW   9 // P9 (Chip pin is pin 9) as Low battery interrupt.
 
 static uint8_t dataQ[WACOM_QUERY_SIZE];// data array, store the data received from w9013
 static uint16_t Xpos;// X axis value keeper.
@@ -59,7 +60,8 @@ static uint16_t PenPressure;// Pressure value keeper.
 static uint8_t usage_report;// FOr reporting Pen tip, Eraser Tip and barrel button
 
 // for fuel gauge status
-uint8_t gauge_failed = 0;
+uint8_t gauge_failed = 0;// if probing is failed, this will set to 1 and will avoid atempting to read from fuel gauge.
+uint8_t bat_low = 0;// set to 1 when battery lvls is at or lower that 10%
 
 // define pins (varies per shield/board)
 #define BLE_REQ   6
@@ -182,6 +184,7 @@ void setup() {
 
   pinMode(WACOM_INT, INPUT_PULLUP);
   pinMode(LED_stat, OUTPUT);
+  pinMode(BAT_LOW, INPUT);
 
   while (w9013_query_device()) { // fast blink while trying to probe the w9013
     digitalWrite(LED_stat, HIGH);
@@ -191,10 +194,11 @@ void setup() {
   }
 
   // fuel gauge probing
-  if(FuelGauge.begin()){
-    FuelGauge.quickstart();
+  if (FuelGauge.deviceFound()) {
+    FuelGauge.setThreshold(10);// battery Threshold is at 10%
+    FuelGauge.quickstart();// quick reset the gauge to restart the calculation.
     gauge_failed = 0;
-  }else{ // slow blink to indicates fuel gauge probing error and then continue
+  } else { // slow blink to indicates fuel gauge probing error and then continue
     digitalWrite(LED_stat, HIGH);
     delay(500);
     digitalWrite(LED_stat, LOW);
@@ -205,7 +209,7 @@ void setup() {
     delay(500);
     gauge_failed = 1;
   }
-  
+
   digitalWrite(LED_stat, HIGH);
   delay(100);
   digitalWrite(LED_stat, LOW);
@@ -216,19 +220,21 @@ void setup() {
   // Set Bluetooth name
   bleHID.setDeviceName("Wac0m RipOff BLE");
   // Set local name as HID
-  bleHID.setLocalName("WC0M");
+  bleHID.setLocalName("Wac0m RipOff BLE");
   // Add HID device (BLEDigitizer)
   bleHID.addHID(HIDd);
   // Init the Bluetooth HID
   bleHID.begin();
 
-   // Battery service
+  // Battery service
   bleHID.setAdvertisedServiceUuid(batteryService.uuid());
   bleHID.addAttribute(batteryService);
   bleHID.addAttribute(battlevelCharacteristic);
   bleHID.addAttribute(battlevelDescriptor);
 
 }
+
+uint16_t blinker = 0;
 
 void loop() {
   BLECentral central = bleHID.central();
@@ -237,19 +243,36 @@ void loop() {
     // central connected to peripheral
     //digitalWrite(LED_stat, HIGH);
     while (central.connected()) {
+      blinker = millis();
+      
       if (digitalRead(WACOM_INT) == LOW) {
         w9013_poll();
         HIDd.DigitizerReport(dataQ[3], Xpos, Yinvert, PenPressure);
-        delay(1);// delay 1ms, throttle down the crazy polling rate.
+        delayMicroseconds(10);// delay 10us, throttle down the crazy polling rate.
       }
       // Send Bluetooth HID report
 
-      // Send battery report 
-      battlevelCharacteristic.setValue((uint8_t)(FuelGauge.percent()));
+      // Send battery report
+      if (!gauge_failed){
+        battlevelCharacteristic.setValue((uint8_t)(FuelGauge.percent()));
+        if(digitalRead(BAT_LOW)){
+            // Low battery alert
+            digitalWrite(LED_stat, HIGH);
+            FuelGauge.clearAlert();// clear fuel gauge alert bit.
+            bat_low = 1;
+          }
+      }
+
+      if(((millis()- blinker) > 250) && (!bat_low)){// hear beat, except when battery is low, it stays solid white.
+           digitalWrite(LED_stat, HIGH);
+           delay(20);
+           digitalWrite(LED_stat, LOW);
+      }
     }
 
     // central disconnected
     if (digitalRead(WACOM_INT) == LOW)
       w9013_poll();// poll in case of Wacom w9013 stuck after BLE disconnected, this will help when reconnect
   }
+  
 }
