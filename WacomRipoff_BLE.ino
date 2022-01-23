@@ -71,7 +71,7 @@ uint8_t bat_low = 0;// set to 1 when battery lvls is at or lower that 10%
 BLEHIDPeripheral bleHID = BLEHIDPeripheral(BLE_REQ, BLE_RDY, BLE_RST);
 BLEDigitizer HIDd;
 
-// Thanks https://github.com/kriswiner/nRF52832DevBoard/blob/master/BMP280_nRF52.ino
+// Thanks https://github.com/kriswiner/nRF52832DevBoard/blob/master/BMP280_nRF52.ino https://developer.apple.com/forums/thread/77866
 // for the battery report example.
 // Battery Service
 BLEService batteryService = BLEService("180F");
@@ -193,27 +193,33 @@ void setup() {
     delay(100);
   }
 
-  // fuel gauge probing
-  if (FuelGauge.deviceFound()) {
-    FuelGauge.setThreshold(10);// battery Threshold is at 10%
-    FuelGauge.quickstart();// quick reset the gauge to restart the calculation.
-    gauge_failed = 0;
-  } else { // slow blink to indicates fuel gauge probing error and then continue
-    digitalWrite(LED_stat, HIGH);
-    delay(500);
-    digitalWrite(LED_stat, LOW);
-    delay(500);
-    digitalWrite(LED_stat, HIGH);
-    delay(500);
-    digitalWrite(LED_stat, LOW);
-    delay(500);
-    gauge_failed = 1;
-  }
+    // fuel gauge probing
+    if (FuelGauge.deviceFound()) {
+      FuelGauge.setThreshold(10);// battery Threshold is at 10%
+      FuelGauge.quickstart();// quick reset the gauge to restart the calculation.
+      gauge_failed = 0;
+    } else { // slow blink to indicates fuel gauge probing error and then continue
+      digitalWrite(LED_stat, HIGH);
+      delay(500);
+      digitalWrite(LED_stat, LOW);
+      delay(500);
+      digitalWrite(LED_stat, HIGH);
+      delay(500);
+      digitalWrite(LED_stat, LOW);
+      delay(500);
+      gauge_failed = 1;
+    }
 
   digitalWrite(LED_stat, HIGH);
   delay(100);
   digitalWrite(LED_stat, LOW);
   delay(100);
+
+  // Battery service
+  bleHID.setAdvertisedServiceUuid(batteryService.uuid());
+  bleHID.addAttribute(batteryService);
+  bleHID.addAttribute(battlevelCharacteristic);
+  bleHID.addAttribute(battlevelDescriptor);
 
   // clears bond data on every boot
   bleHID.clearBondStoreData();
@@ -226,11 +232,7 @@ void setup() {
   // Init the Bluetooth HID
   bleHID.begin();
 
-  // Battery service
-  bleHID.setAdvertisedServiceUuid(batteryService.uuid());
-  bleHID.addAttribute(batteryService);
-  bleHID.addAttribute(battlevelCharacteristic);
-  bleHID.addAttribute(battlevelDescriptor);
+
 
 }
 
@@ -243,36 +245,29 @@ void loop() {
     // central connected to peripheral
     //digitalWrite(LED_stat, HIGH);
     while (central.connected()) {
-      blinker = millis();
-      
+
       if (digitalRead(WACOM_INT) == LOW) {
         w9013_poll();
-        HIDd.DigitizerReport(dataQ[3], Xpos, Yinvert, PenPressure);
+        HIDd.DigitizerReport(dataQ[3], Xpos, Yinvert, PenPressure);// Send Bluetooth HID report
         delayMicroseconds(10);// delay 10us, throttle down the crazy polling rate.
       }
-      // Send Bluetooth HID report
 
       // Send battery report
-      if (!gauge_failed){
+      if (!gauge_failed) {
         battlevelCharacteristic.setValue((uint8_t)(FuelGauge.percent()));
-        if(digitalRead(BAT_LOW)){
-            // Low battery alert
-            digitalWrite(LED_stat, HIGH);
-            FuelGauge.clearAlert();// clear fuel gauge alert bit.
-            bat_low = 1;
-          }
+        if (digitalRead(BAT_LOW)) {
+          // Low battery alert
+          digitalWrite(LED_stat, HIGH);
+          FuelGauge.clearAlert();// clear fuel gauge alert bit.
+          bat_low = 1;
+        }
       }
-
-      if(((millis()- blinker) > 250) && (!bat_low)){// hear beat, except when battery is low, it stays solid white.
-           digitalWrite(LED_stat, HIGH);
-           delay(20);
-           digitalWrite(LED_stat, LOW);
-      }
+      
     }
 
     // central disconnected
     if (digitalRead(WACOM_INT) == LOW)
       w9013_poll();// poll in case of Wacom w9013 stuck after BLE disconnected, this will help when reconnect
   }
-  
+
 }
