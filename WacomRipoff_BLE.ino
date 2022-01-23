@@ -232,8 +232,6 @@ void setup() {
   // Init the Bluetooth HID
   bleHID.begin();
 
-
-
 }
 
 uint16_t blinker = 0;
