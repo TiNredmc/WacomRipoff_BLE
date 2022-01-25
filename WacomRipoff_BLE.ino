@@ -51,7 +51,7 @@
 
 #define WACOM_INT 3 // P5 (Chip pin is pin 3) as Input interrupt (but use for polling).
 #define LED_stat  4 // P6 (Chip pin is pin 4) as LED status.
-#define BAT_LOW   9 // P9 (Chip pin is pin 9) as Low battery interrupt.
+#define BAT_LOW   9 // P7 (Chip pin is pin 9) as Low battery interrupt.
 
 static uint8_t dataQ[WACOM_QUERY_SIZE];// data array, store the data received from w9013
 static uint16_t Xpos;// X axis value keeper.
@@ -178,13 +178,19 @@ void w9013_poll() {
 }
 
 void setup() {
-  Wire.setPins(2, 1);// set SDA, SCL pin (module pin : P4 and P3)
-  Wire.begin();
-  Wire.setClock(400000);
-
   pinMode(WACOM_INT, INPUT_PULLUP);
   pinMode(LED_stat, OUTPUT);
   pinMode(BAT_LOW, INPUT);
+
+  digitalWrite(LED_stat, HIGH);
+  delay(100);
+  digitalWrite(LED_stat, LOW);
+  delay(100);
+
+  Wire.setPins(2, 1);// set SDA, SCL pin (module pin : P4 and P3)
+  Wire.setClock(400000);
+  Wire.begin();
+  
 
   while (w9013_query_device()) { // fast blink while trying to probe the w9013
     digitalWrite(LED_stat, HIGH);
@@ -193,27 +199,23 @@ void setup() {
     delay(100);
   }
 
-    // fuel gauge probing
-    if (FuelGauge.deviceFound()) {
-      FuelGauge.setThreshold(10);// battery Threshold is at 10%
-      FuelGauge.quickstart();// quick reset the gauge to restart the calculation.
-      gauge_failed = 0;
-    } else { // slow blink to indicates fuel gauge probing error and then continue
-      digitalWrite(LED_stat, HIGH);
-      delay(500);
-      digitalWrite(LED_stat, LOW);
-      delay(500);
-      digitalWrite(LED_stat, HIGH);
-      delay(500);
-      digitalWrite(LED_stat, LOW);
-      delay(500);
-      gauge_failed = 1;
-    }
+  // fuel gauge probing
+  if (FuelGauge.begin()) {
+    FuelGauge.setThreshold(10);// battery Threshold is at 10%
+    FuelGauge.quickstart();// quick reset the gauge to restart the calculation.
+    gauge_failed = 0;
+  } else { // slow blink to indicates fuel gauge probing error and then continue
+    digitalWrite(LED_stat, HIGH);
+    delay(500);
+    digitalWrite(LED_stat, LOW);
+    delay(500);
+    digitalWrite(LED_stat, HIGH);
+    delay(500);
+    digitalWrite(LED_stat, LOW);
+    delay(500);
+    gauge_failed = 1;
+  }
 
-  digitalWrite(LED_stat, HIGH);
-  delay(100);
-  digitalWrite(LED_stat, LOW);
-  delay(100);
 
   // Battery service
   bleHID.setAdvertisedServiceUuid(batteryService.uuid());
@@ -234,8 +236,6 @@ void setup() {
 
 }
 
-uint16_t blinker = 0;
-
 void loop() {
   BLECentral central = bleHID.central();
 
@@ -253,14 +253,14 @@ void loop() {
       // Send battery report
       if (!gauge_failed) {
         battlevelCharacteristic.setValue((uint8_t)(FuelGauge.percent()));
-        if (digitalRead(BAT_LOW)) {
+        if (!digitalRead(BAT_LOW)) {
           // Low battery alert
           digitalWrite(LED_stat, HIGH);
           FuelGauge.clearAlert();// clear fuel gauge alert bit.
           bat_low = 1;
         }
       }
-      
+
     }
 
     // central disconnected
